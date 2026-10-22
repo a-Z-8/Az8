@@ -1,0 +1,524 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>立方差因式分解 · 两种切割方案</title>
+<style>
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; }
+  body {
+    background: #0e0e14;
+    font-family: 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', system-ui, sans-serif;
+    color: #e8e8f0;
+  }
+  #panel {
+    position: absolute; top: 10px; left: 10px;
+    max-width: min(380px, calc(100vw - 20px));
+    background: rgba(18, 18, 30, 0.82);
+    backdrop-filter: blur(10px);
+    border: 1px solid rgba(255,255,255,0.07);
+    border-radius: 10px;
+    padding: 8px 12px;
+    pointer-events: none;
+    z-index: 10;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.35);
+  }
+  #panel .title {
+    font-size: clamp(0.7rem, 2.6vw, 0.85rem);
+    font-weight: 600;
+    color: #aab;
+    letter-spacing: 0.3px;
+    margin-bottom: 4px;
+  }
+  #panel .formula {
+    font-family: 'Cambria Math', 'Latin Modern Math', 'Times New Roman', serif;
+    font-size: clamp(0.76rem, 2.9vw, 0.94rem);
+    line-height: 1.65;
+    word-break: break-word;
+  }
+  .c1 { color: #ffb347; font-weight: 600; }
+  .c2 { color: #4ade80; font-weight: 600; }
+  .c3 { color: #60a5fa; font-weight: 600; }
+  .c4 { color: #c084fc; font-weight: 600; }
+  .c5 { color: #fcd34d; font-weight: 600; }
+
+  #controls {
+    position: absolute; bottom: 22px; left: 50%; transform: translateX(-50%);
+    display: flex; align-items: center; gap: 10px; flex-wrap: wrap; justify-content: center;
+    background: rgba(20, 20, 32, 0.92);
+    backdrop-filter: blur(12px);
+    border: 1px solid rgba(255,255,255,0.1);
+    border-radius: 50px;
+    padding: 10px 18px;
+    z-index: 20;
+    max-width: calc(100vw - 24px);
+    box-shadow: 0 8px 32px rgba(0,0,0,0.5);
+  }
+  #controls button {
+    background: rgba(255,255,255,0.06);
+    border: 1px solid rgba(255,255,255,0.12);
+    color: #ddd;
+    padding: 7px 16px; border-radius: 30px;
+    cursor: pointer; font-size: 0.85rem; font-weight: 500;
+    transition: all 0.18s ease;
+    white-space: nowrap;
+    font-family: inherit;
+  }
+  #controls button:hover {
+    background: rgba(255,255,255,0.12);
+    border-color: rgba(255,255,255,0.25);
+  }
+  #controls button.active {
+    background: linear-gradient(135deg, #3b6fd4, #5a8af0);
+    border-color: #7ba6ff;
+    color: #fff;
+    box-shadow: 0 0 16px rgba(90, 138, 240, 0.45);
+  }
+  .slider-wrap {
+    display: flex; align-items: center; gap: 7px;
+    color: #999; font-size: 0.85rem;
+    padding: 0 4px;
+  }
+  .slider-wrap label {
+    font-family: 'Cambria Math', serif; font-style: italic;
+    font-size: 1rem; color: #bbb;
+  }
+  .slider-wrap input[type="range"] {
+    width: 100px; cursor: pointer; accent-color: #5a8af0; height: 4px;
+  }
+  .slider-wrap .val {
+    display: inline-block; min-width: 34px; text-align: center;
+    background: rgba(0,0,0,0.35); padding: 2px 8px; border-radius: 12px;
+    font-family: 'SF Mono', monospace; font-size: 0.8rem; color: #8ab4f8;
+  }
+  .divider {
+    width: 1px; height: 22px; background: rgba(255,255,255,0.12); margin: 0 2px;
+  }
+  #err {
+    position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+    background: rgba(60, 20, 20, 0.95); color: #ffbbbb;
+    padding: 16px 22px; border-radius: 10px; font-size: 0.9rem;
+    display: none; z-index: 100; max-width: 80vw; text-align: center;
+  }
+  @media (max-width: 760px) {
+    #controls { border-radius: 20px; padding: 12px; gap: 8px; }
+    .slider-wrap input[type="range"] { width: 68px; }
+  }
+</style>
+</head>
+<body>
+
+<div id="panel">
+  <div class="title">立方差因式分解</div>
+  <div class="formula" id="formula"></div>
+</div>
+
+<div id="controls">
+  <button class="scheme-btn active" data-scheme="1">方案一：三块长方体</button>
+  <button class="scheme-btn" data-scheme="2">方案二：立方体 + 三长方体</button>
+  <div class="divider"></div>
+  <div class="slider-wrap">
+    <label>a</label>
+    <input type="range" id="aRange" min="2.5" max="5" step="0.1" value="4">
+    <span class="val" id="aOut">4.0</span>
+  </div>
+  <div class="slider-wrap">
+    <label>b</label>
+    <input type="range" id="bRange" min="0.5" max="3.5" step="0.1" value="1.5">
+    <span class="val" id="bOut">1.5</span>
+  </div>
+  <div class="divider"></div>
+  <button id="rotateBtn">自动旋转</button>
+  <button id="resetBtn">重置视角</button>
+</div>
+
+<div id="err">Three.js 加载失败，请检查网络后刷新页面。</div>
+
+<!-- 传统 UMD 脚本，双击本地 HTML 直接运行，无需本地服务器 -->
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+
+<script>
+(function () {
+  if (typeof THREE === 'undefined') {
+    document.getElementById('err').style.display = 'block';
+    return;
+  }
+
+  // ---------- 参数 ----------
+  var params = { a: 4, b: 1.5, scheme: 1 };
+
+  // ---------- 场景 ----------
+  var scene = new THREE.Scene();
+  scene.background = new THREE.Color(0x0e0e14);
+
+  var camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 200);
+  camera.position.set(10, 8, 12);
+
+  var renderer = new THREE.WebGLRenderer({ antialias: true });
+  renderer.setSize(window.innerWidth, window.innerHeight);
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+  renderer.shadowMap.enabled = true;
+  renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+  document.body.appendChild(renderer.domElement);
+
+  var controls = new THREE.OrbitControls(camera, renderer.domElement);
+  controls.enableDamping = true;
+  controls.dampingFactor = 0.08;
+  controls.autoRotate = false;
+  controls.autoRotateSpeed = 0.9;
+  controls.minDistance = 4;
+  controls.maxDistance = 40;
+  controls.target.set(2, 2, 2);
+
+  // ---------- 光照 ----------
+  scene.add(new THREE.HemisphereLight(0xffffff, 0x222233, 0.85));
+
+  var keyLight = new THREE.DirectionalLight(0xffffff, 1.8);
+  keyLight.position.set(9, 14, 11);
+  keyLight.castShadow = true;
+  keyLight.shadow.mapSize.width = 2048;
+  keyLight.shadow.mapSize.height = 2048;
+  keyLight.shadow.camera.near = 0.5;
+  keyLight.shadow.camera.far = 60;
+  keyLight.shadow.camera.left = -14;
+  keyLight.shadow.camera.right = 14;
+  keyLight.shadow.camera.top = 14;
+  keyLight.shadow.camera.bottom = -14;
+  keyLight.shadow.bias = -0.0005;
+  scene.add(keyLight);
+
+  var fillLight = new THREE.DirectionalLight(0xaaccff, 0.5);
+  fillLight.position.set(-10, 5, -8);
+  scene.add(fillLight);
+
+  var rimLight = new THREE.DirectionalLight(0xffddaa, 0.35);
+  rimLight.position.set(0, -5, 6);
+  scene.add(rimLight);
+
+  // ---------- 阴影地面 ----------
+  var ground = new THREE.Mesh(
+    new THREE.PlaneGeometry(80, 80),
+    new THREE.ShadowMaterial({ opacity: 0.3 })
+  );
+  ground.rotation.x = -Math.PI / 2;
+  ground.position.y = -0.002;
+  ground.receiveShadow = true;
+  scene.add(ground);
+
+  // ---------- 根组 ----------
+  var root = new THREE.Group();
+  scene.add(root);
+
+  // ---------- 圆角矩形 ----------
+  function roundRect(ctx, x, y, w, h, r) {
+    ctx.beginPath();
+    ctx.moveTo(x + r, y);
+    ctx.lineTo(x + w - r, y);
+    ctx.quadraticCurveTo(x + w, y, x + w, y + r);
+    ctx.lineTo(x + w, y + h - r);
+    ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+    ctx.lineTo(x + r, y + h);
+    ctx.quadraticCurveTo(x, y + h, x, y + h - r);
+    ctx.lineTo(x, y + r);
+    ctx.quadraticCurveTo(x, y, x + r, y);
+    ctx.closePath();
+  }
+
+  // ---------- 方块标签（双行：符号 + 数值） ----------
+  function createBlockLabel(sym, num, colorHex) {
+    var W = 512, H = 140;
+    var canvas = document.createElement('canvas');
+    canvas.width = W;
+    canvas.height = H;
+    var ctx = canvas.getContext('2d');
+    ctx.clearRect(0, 0, W, H);
+
+    // 深色半透明底 + 彩色边框
+    ctx.fillStyle = 'rgba(10, 10, 20, 0.86)';
+    roundRect(ctx, 2, 2, W - 4, H - 4, 20);
+    ctx.fill();
+
+    ctx.strokeStyle = colorHex;
+    ctx.lineWidth = 4;
+    ctx.globalAlpha = 0.9;
+    roundRect(ctx, 2, 2, W - 4, H - 4, 20);
+    ctx.stroke();
+    ctx.globalAlpha = 1;
+
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+
+    // 第一行：符号表达式
+    ctx.font = 'bold 40px "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif';
+    ctx.fillStyle = colorHex;
+    ctx.fillText(sym, W / 2, 46);
+
+    // 第二行：具体数值
+    ctx.font = '32px "SF Mono", "Consolas", monospace';
+    ctx.fillStyle = 'rgba(232, 238, 252, 0.92)';
+    ctx.fillText(num, W / 2, 102);
+
+    var tex = new THREE.CanvasTexture(canvas);
+    tex.minFilter = THREE.LinearFilter;
+    tex.magFilter = THREE.LinearFilter;
+    tex.needsUpdate = true;
+
+    var mat = new THREE.SpriteMaterial({
+      map: tex,
+      transparent: true,
+      depthTest: false,
+      depthWrite: false
+    });
+    var sprite = new THREE.Sprite(mat);
+    sprite.renderOrder = 1000;
+    return sprite;
+  }
+
+  // ---------- 添加实体块 + 边缘标签 ----------
+  function addSolid(w, h, d, color, pos, labelPos, sym, num) {
+    var geo = new THREE.BoxGeometry(w, h, d);
+    var mat = new THREE.MeshStandardMaterial({
+      color: color,
+      roughness: 0.48,
+      metalness: 0.08
+    });
+    var mesh = new THREE.Mesh(geo, mat);
+    mesh.position.set(pos[0], pos[1], pos[2]);
+    mesh.castShadow = true;
+    mesh.receiveShadow = true;
+    root.add(mesh);
+
+    var edges = new THREE.LineSegments(
+      new THREE.EdgesGeometry(geo),
+      new THREE.LineBasicMaterial({ color: 0x0a0a12 })
+    );
+    edges.position.set(pos[0], pos[1], pos[2]);
+    root.add(edges);
+
+    if (labelPos && sym) {
+      var colorHex = '#' + color.toString(16).padStart(6, '0');
+      var lbl = createBlockLabel(sym, num, colorHex);
+      lbl.position.set(labelPos[0], labelPos[1], labelPos[2]);
+      var sw = Math.max(1.35, params.a * 0.4);
+      lbl.scale.set(sw, sw * (140 / 512), 1);
+      root.add(lbl);
+    }
+  }
+
+  // ---------- 大立方体轮廓 ----------
+  function addBigOutline(a) {
+    var geo = new THREE.BoxGeometry(a, a, a);
+    var edges = new THREE.LineSegments(
+      new THREE.EdgesGeometry(geo),
+      new THREE.LineBasicMaterial({ color: 0x6688ff, transparent: true, opacity: 0.3 })
+    );
+    edges.position.set(a / 2, a / 2, a / 2);
+    root.add(edges);
+  }
+
+  // ---------- 被挖去的小立方体轮廓 ----------
+  function addRemovedCube(b) {
+    var geo = new THREE.BoxGeometry(b, b, b);
+    var edges = new THREE.LineSegments(
+      new THREE.EdgesGeometry(geo),
+      new THREE.LineBasicMaterial({ color: 0xff5577, transparent: true, opacity: 0.85 })
+    );
+    edges.position.set(b / 2, b / 2, b / 2);
+    root.add(edges);
+
+    var faceGeo = new THREE.BoxGeometry(b, b, b);
+    var faceMat = new THREE.MeshBasicMaterial({
+      color: 0xff5577,
+      transparent: true,
+      opacity: 0.07,
+      depthWrite: false,
+      side: THREE.DoubleSide
+    });
+    var face = new THREE.Mesh(faceGeo, faceMat);
+    face.position.set(b / 2, b / 2, b / 2);
+    root.add(face);
+  }
+
+  // ---------- 清除 ----------
+  function disposeGroup() {
+    var toDispose = [];
+    root.traverse(function (obj) {
+      if (obj !== root) toDispose.push(obj);
+    });
+    toDispose.forEach(function (obj) {
+      if (obj.geometry) obj.geometry.dispose();
+      if (obj.material) {
+        var mats = Array.isArray(obj.material) ? obj.material : [obj.material];
+        mats.forEach(function (m) {
+          if (m.map) m.map.dispose();
+          m.dispose();
+        });
+      }
+    });
+    while (root.children.length) root.remove(root.children[0]);
+  }
+
+  // ---------- 构建 ----------
+  function rebuild() {
+    disposeGroup();
+    var a = params.a, b = params.b, scheme = params.scheme;
+    var d = a - b;
+    var off = Math.max(0.28, a * 0.075);
+
+    addBigOutline(a);
+    addRemovedCube(b);
+
+    if (scheme === 1) {
+      // ===== 方案一：三块长方体 =====
+
+      // 橙：a × a × (a−b)
+      addSolid(a, a, d, 0xffb347,
+        [a / 2, a / 2, b + d / 2],
+        [a + off, a * 0.58, a + off],
+        'a × a × (a−b)',
+        a.toFixed(1) + ' × ' + a.toFixed(1) + ' × ' + d.toFixed(1));
+
+      // 绿：a × (a−b) × b
+      addSolid(a, d, b, 0x4ade80,
+        [a / 2, b + d / 2, b / 2],
+        [a + off, a + off, b * 0.55],
+        'a × (a−b) × b',
+        a.toFixed(1) + ' × ' + d.toFixed(1) + ' × ' + b.toFixed(1));
+
+      // 蓝：(a−b) × b × b
+      addSolid(d, b, b, 0x60a5fa,
+        [b + d / 2, b / 2, b / 2],
+        [a + off, b * 0.55, -off],
+        '(a−b) × b × b',
+        d.toFixed(1) + ' × ' + b.toFixed(1) + ' × ' + b.toFixed(1));
+
+    } else {
+      // ===== 方案二：(a−b)³ 立方体 + 三个 ab(a−b) 长方体 =====
+
+      // 紫：(a−b)³
+      addSolid(d, d, d, 0xc084fc,
+        [b + d / 2, b + d / 2, b + d / 2],
+        [a + off, a + off, a + off],
+        '(a−b)³',
+        d.toFixed(1) + '³');
+
+      // 黄1：a × b × (a−b)
+      addSolid(a, b, d, 0xfcd34d,
+        [a / 2, b / 2, b + d / 2],
+        [a + off, b * 0.55, a + off],
+        'a × b × (a−b)',
+        a.toFixed(1) + ' × ' + b.toFixed(1) + ' × ' + d.toFixed(1));
+
+      // 黄2：b × (a−b) × a
+      addSolid(b, d, a, 0xfbbf24,
+        [b / 2, b + d / 2, a / 2],
+        [-off, a + off, a + off],
+        'b × (a−b) × a',
+        b.toFixed(1) + ' × ' + d.toFixed(1) + ' × ' + a.toFixed(1));
+
+      // 黄3：(a−b) × a × b
+      addSolid(d, a, b, 0xf59e0b,
+        [b + d / 2, a / 2, b / 2],
+        [a + off, a + off, -off],
+        '(a−b) × a × b',
+        d.toFixed(1) + ' × ' + a.toFixed(1) + ' × ' + b.toFixed(1));
+    }
+
+    // 相机目标跟随中心平移
+    var center = new THREE.Vector3(a / 2, a / 2, a / 2);
+    var offset = camera.position.clone().sub(controls.target);
+    controls.target.copy(center);
+    camera.position.copy(center).add(offset);
+    controls.update();
+
+    updateInfo();
+  }
+
+  // ---------- 公式更新 ----------
+  var formulaEl = document.getElementById('formula');
+
+  function updateInfo() {
+    if (params.scheme === 1) {
+      formulaEl.innerHTML =
+        'a³ − b³ = <span class="c1">a²(a−b)</span> + <span class="c2">ab(a−b)</span> + <span class="c3">b²(a−b)</span><br>' +
+        '&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;= (a−b)(a² + ab + b²)';
+    } else {
+      formulaEl.innerHTML =
+        'a³ − b³ = <span class="c4">(a−b)³</span> + 3·<span class="c5">ab(a−b)</span><br>' +
+        '&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;= (a−b)(a² + ab + b²)';
+    }
+  }
+
+  // ---------- UI 绑定 ----------
+  var aRange = document.getElementById('aRange');
+  var bRange = document.getElementById('bRange');
+  var aOut = document.getElementById('aOut');
+  var bOut = document.getElementById('bOut');
+
+  Array.prototype.forEach.call(document.querySelectorAll('.scheme-btn'), function (btn) {
+    btn.addEventListener('click', function () {
+      Array.prototype.forEach.call(document.querySelectorAll('.scheme-btn'), function (b) {
+        b.classList.remove('active');
+      });
+      btn.classList.add('active');
+      params.scheme = parseInt(btn.dataset.scheme, 10);
+      rebuild();
+    });
+  });
+
+  aRange.addEventListener('input', function (e) {
+    params.a = parseFloat(e.target.value);
+    aOut.textContent = params.a.toFixed(1);
+    var maxB = Math.max(0.5, params.a - 0.5);
+    bRange.max = maxB.toFixed(1);
+    if (params.b > maxB) {
+      params.b = maxB;
+      bRange.value = params.b.toFixed(1);
+      bOut.textContent = params.b.toFixed(1);
+    }
+    rebuild();
+  });
+
+  bRange.addEventListener('input', function (e) {
+    params.b = parseFloat(e.target.value);
+    bOut.textContent = params.b.toFixed(1);
+    rebuild();
+  });
+
+  document.getElementById('resetBtn').addEventListener('click', function () {
+    var a = params.a;
+    camera.position.set(a * 2.2, a * 1.8, a * 2.6);
+    controls.target.set(a / 2, a / 2, a / 2);
+    controls.update();
+  });
+
+  var rotateBtn = document.getElementById('rotateBtn');
+  rotateBtn.addEventListener('click', function () {
+    controls.autoRotate = !controls.autoRotate;
+    rotateBtn.classList.toggle('active', controls.autoRotate);
+    rotateBtn.textContent = controls.autoRotate ? '停止旋转' : '自动旋转';
+  });
+
+  // ---------- 窗口变化 ----------
+  window.addEventListener('resize', function () {
+    camera.aspect = window.innerWidth / window.innerHeight;
+    camera.updateProjectionMatrix();
+    renderer.setSize(window.innerWidth, window.innerHeight);
+  });
+
+  // ---------- 动画循环 ----------
+  function animate() {
+    requestAnimationFrame(animate);
+    controls.update();
+    renderer.render(scene, camera);
+  }
+
+  // ---------- 启动 ----------
+  rebuild();
+  animate();
+})();
+</script>
+</body>
+</html>
